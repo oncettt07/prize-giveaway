@@ -1839,6 +1839,33 @@ body {
         justify-content: center;
         padding: 0.8rem;
     }
+
+    /* Winner Reveal Mobile Adjustments */
+    .winner-phase-container {
+        padding: 1.5rem;
+    }
+
+    .winner-title-text {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .winner-info-box {
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .winner-name-big {
+        font-size: 2rem;
+    }
+
+    .winner-twitter-text {
+        font-size: 1.2rem;
+    }
+
+    .prize-name-text {
+        font-size: 1.5rem;
+    }
 }
 
 .prize-reveal-image img:hover {
