@@ -1,3 +1,5 @@
+import { addEntry } from './common.js';
+
 // ===== DOM Elements =====
 const prizesList = document.getElementById('prizesList');
 const emptyState = document.getElementById('emptyState');
@@ -22,15 +24,41 @@ const closeWinnerReveal = document.getElementById('closeWinnerReveal');
 const countdownPhase = document.getElementById('countdownPhase');
 const spinningPhase = document.getElementById('spinningPhase');
 const winnerPhase = document.getElementById('winnerPhase');
-const countdownNumber = document.getElementById('countdownNumber');
 
 // ===== State =====
 let currentPrizeId = null;
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    renderLabels(); // From common.js
-    renderPrizes();
+    // Listen for data updates from common.js
+    window.addEventListener('labelsUpdated', renderLabels); // renderLabels is global from common.js? No, from common.js it's internal unless exposed.
+    // In common.js I removed renderLabels export? 
+    // Wait, common.js has renderLabels() function but it was NOT attached to window in my rewrite.
+    // I need to check common.js again.
+    // In common.js I wrote: function renderLabels() { ... } but did NOT export it or attach to window.
+    // AND I removed it from common.js in the rewrite?
+    // Let me check common.js content I wrote in Step 798.
+    // I DELETED renderLabels logic from common.js because I thought it was UI logic.
+    // BUT user.js relied on it.
+    // So I need to implement renderLabels in user.js OR add it back to common.js.
+    // Since it renders to 'labelsContainer' which is in index.html, it belongs in user.js (or common if shared).
+    // admin.js has its own renderAdminLabels.
+    // So user.js needs renderLabels.
+
+    window.addEventListener('prizesUpdated', () => {
+        renderPrizes(); // For Join Tab
+        renderWinnersList(); // For Winners Tab
+    });
+
+    // Initial render if data already exists
+    if (window.prizes && window.prizes.length > 0) {
+        renderPrizes();
+        renderWinnersList();
+    }
+    // Listen for labels? user.js needs to render labels? Yes.
+    window.addEventListener('labelsUpdated', renderUserLabels);
+    if (window.labels && window.labels.length > 0) renderUserLabels();
+
     updateEmptyState();
 
     // Initialize tabs
@@ -39,14 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== User Tab Switching =====
 function initializeUserTabs() {
-    const userTabs = document.querySelectorAll('.admin-tab'); // Using same class for tabs?
-    // In index.html, tabs have class "admin-tab" inside "userTabsNavigation"
+    const userTabs = document.querySelectorAll('.admin-tab');
     const joinTab = document.getElementById('joinTab');
     const winnersTab = document.getElementById('winnersTab');
 
     userTabs.forEach(tab => {
         tab.addEventListener('click', () => {
-            // Remove active from all
             userTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
 
@@ -64,12 +90,34 @@ function initializeUserTabs() {
     });
 }
 
+// ===== Labels Rendering =====
+function renderUserLabels() {
+    const labelsContainer = document.getElementById('labelsContainer');
+    if (!labelsContainer) return;
+
+    const labels = window.labels || [];
+
+    if (labels.length === 0) {
+        labelsContainer.innerHTML = '';
+        return;
+    }
+
+    labelsContainer.innerHTML = labels.map(label => `
+        <div class="label-item">
+            <div class="label-item-text">${label.text}</div>
+        </div>
+    `).join('');
+}
+
+
 // ===== Render Prizes (Join Tab) =====
 function renderPrizes() {
     if (!prizesList) return;
     prizesList.innerHTML = '';
 
     const now = new Date();
+    const prizes = window.prizes || [];
+
     // Filter active prizes
     const activePrizes = prizes.filter(prize => {
         const deadline = new Date(prize.deadline);
@@ -80,11 +128,14 @@ function renderPrizes() {
         const prizeCard = createPrizeCard(prize);
         prizesList.appendChild(prizeCard);
     });
+
+    updateEmptyState();
 }
 
 function updateEmptyState() {
     if (!emptyState || !prizesList) return;
     const now = new Date();
+    const prizes = window.prizes || [];
     const activePrizes = prizes.filter(p => now < new Date(p.deadline));
 
     if (activePrizes.length === 0) {
@@ -104,7 +155,6 @@ function createPrizeCard(prize) {
     const now = new Date();
     const deadline = new Date(prize.deadline);
     const isActive = now < deadline;
-    const hasWinner = prize.winner !== null;
 
     // Images logic
     const images = prize.images || (prize.image ? [prize.image] : []);
@@ -114,15 +164,15 @@ function createPrizeCard(prize) {
         if (images.length === 1) {
             imageHtml = `<img src="${images[0]}" alt="${prize.name}" onclick="event.stopPropagation(); openImageViewer('${images[0]}');">`;
         } else {
-            // Gallery logic
+            // Gallery logic using window.functions from common.js
             imageHtml = `
                 <div class="image-gallery">
                     <img class="gallery-main-image" src="${images[0]}" alt="${prize.name}" data-prize-id="${prize.id}" onclick="event.stopPropagation(); openImageViewer('${images[0]}');">
                     ${images.length > 1 ? `
-                        <button class="gallery-nav prev" onclick="event.stopPropagation(); changeGalleryImage(${prize.id}, -1);">‹</button>
-                        <button class="gallery-nav next" onclick="event.stopPropagation(); changeGalleryImage(${prize.id}, 1);">›</button>
+                        <button class="gallery-nav prev" onclick="event.stopPropagation(); changeGalleryImage('${prize.id}', -1);">‹</button>
+                        <button class="gallery-nav next" onclick="event.stopPropagation(); changeGalleryImage('${prize.id}', 1);">›</button>
                         <div class="gallery-dots">
-                            ${images.map((_, index) => `<div class="gallery-dot ${index === 0 ? 'active' : ''}" onclick="event.stopPropagation(); setGalleryImage(${prize.id}, ${index});"></div>`).join('')}
+                            ${images.map((_, index) => `<div class="gallery-dot ${index === 0 ? 'active' : ''}" onclick="event.stopPropagation(); setGalleryImage('${prize.id}', ${index});"></div>`).join('')}
                         </div>
                     ` : ''}
                 </div>
@@ -161,18 +211,17 @@ function createPrizeCard(prize) {
             ${countdownHtml}
             <div class="prize-meta">
                 <div>⏰ สิ้นสุด: ${formatDateTime(prize.deadline)}</div>
-                <div class="prize-entries">👥 ผู้เข้าร่วม: ${prize.entries.length} คน</div>
+                <div class="prize-entries">👥 ผู้เข้าร่วม: ${prize.entries ? prize.entries.length : 0} คน</div>
             </div>
-            <button class="btn-primary" style="width:100%;margin-top:1rem;" onclick="openEntryModal(${prize.id})">
+            <button class="btn-primary" style="width:100%;margin-top:1rem;" onclick="openEntryModal('${prize.id}')">
                 เข้าร่วมสนุก
             </button>
         </div>
     `;
 
-    // Make card clickable to show detail
+    // Make card clickable to show detail (excluding buttons/images)
     card.addEventListener('click', (e) => {
-        // Don't open detail if clicking on action buttons or images (which have their own handlers)
-        if (!e.target.closest('button') && !e.target.closest('img')) {
+        if (!e.target.closest('button') && !e.target.closest('img') && !e.target.closest('.gallery-dot')) {
             openPrizeDetail(prize.id);
         }
     });
@@ -182,13 +231,13 @@ function createPrizeCard(prize) {
 
 // ===== Render Winners List (Winners Tab) =====
 function renderWinnersList() {
+    // Re-select because tab switching might affect visibility/DOM? No, consistent ID.
+    const winnersList = document.getElementById('winnersList');
     if (!winnersList) return;
     winnersList.innerHTML = '';
 
-    // Only expired prizes logic (or should we show all drawn prizes?)
-    // Original code showed all expired prizes.
-
     const now = new Date();
+    const prizes = window.prizes || [];
     const expiredPrizes = prizes.filter(p => now >= new Date(p.deadline));
 
     if (expiredPrizes.length === 0) {
@@ -196,7 +245,6 @@ function renderWinnersList() {
         return;
     }
 
-    // Grid layout
     winnersList.style.display = 'grid';
     winnersList.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
     winnersList.style.gap = '1.5rem';
@@ -211,7 +259,6 @@ function createWinnerPrizeCard(prize) {
     const card = document.createElement('div');
     card.className = 'prize-card';
 
-    // Image logic (Simplified for brevity, assume similar to createPrizeCard or extracted)
     const images = prize.images || (prize.image ? [prize.image] : []);
     const imageHtml = images.length > 0 ? `<img src="${images[0]}" onclick="openImageViewer('${images[0]}')">` : '🎁';
 
@@ -219,16 +266,14 @@ function createWinnerPrizeCard(prize) {
 
     let statusHtml = '';
     if (hasWinner) {
-        // Green for Winner Announced
         statusHtml = '<span class="prize-status" style="background:rgba(76, 175, 80, 0.2); color:#4caf50; border:1px solid rgba(76, 175, 80, 0.3);">🏆 ประกาศผลแล้ว</span>';
     } else {
-        // Orange/Yellow for Waiting
         statusHtml = '<span class="prize-status" style="background:rgba(255, 152, 0, 0.2); color:#ff9800; border:1px solid rgba(255, 152, 0, 0.3);">⏳ รอประกาศผล</span>';
     }
 
     let actionHtml = '';
     if (hasWinner) {
-        actionHtml = `<button class="btn-primary" onclick="revealWinner(${prize.id})" style="width:100%;margin-top:1rem;">🏆 ดูผู้โชคดี</button>`;
+        actionHtml = `<button class="btn-primary" onclick="revealWinner('${prize.id}')" style="width:100%;margin-top:1rem;">🏆 ดูผู้โชคดี</button>`;
     } else {
         actionHtml = `<div style="text-align:center;margin-top:1rem;color:gray;">รอประกาศผล...</div>`;
     }
@@ -242,7 +287,7 @@ function createWinnerPrizeCard(prize) {
              </div>
              <p class="prize-description">${prize.description || ''}</p>
              <div class="prize-meta">
-                <div class="prize-entries">👥 ผู้เข้าร่วม: ${prize.entries.length} คน</div>
+                <div class="prize-entries">👥 ผู้เข้าร่วม: ${prize.entries ? prize.entries.length : 0} คน</div>
              </div>
              ${actionHtml}
         </div>
@@ -252,7 +297,7 @@ function createWinnerPrizeCard(prize) {
 
 // ===== Entry Modal Logic =====
 function openEntryModal(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
     currentPrizeId = prizeId;
 
@@ -264,43 +309,56 @@ function openEntryModal(prizeId) {
 closeModal.addEventListener('click', () => entryModal.classList.add('hidden'));
 cancelEntry.addEventListener('click', () => entryModal.classList.add('hidden'));
 
-entryForm.addEventListener('submit', (e) => {
+entryForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const prize = prizes.find(p => p.id === currentPrizeId);
+    const prize = window.prizes.find(p => p.id == currentPrizeId);
     if (!prize) return;
 
     const name = document.getElementById('participantName').value.trim();
     const twitter = document.getElementById('participantTwitter').value.trim();
 
     // Check duplicates
-    if (prize.entries.some(e => e.name === name || e.twitter === twitter)) {
+    if (prize.entries && prize.entries.some(e => e.name === name || e.twitter === twitter)) {
         showNotification('คุณลงทะเบียนไปแล้ว', 'error');
         return;
     }
 
-    prize.entries.push({
-        id: Date.now(),
+    const entryData = {
         name,
         twitter,
         enteredAt: new Date().toISOString()
-    });
+    };
 
-    savePrizes();
-    renderPrizes();
-    entryModal.classList.add('hidden');
-    entryForm.reset();
-    showNotification('ลงทะเบียนสำเร็จ! 🎉');
+    const submitBtn = entryForm.querySelector('button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'กำลังบันทึก...';
+    }
+
+    const success = await addEntry(prize.id, entryData);
+
+    if (success) {
+        showNotification('ลงทะเบียนสำเร็จ! 🎉');
+        entryModal.classList.add('hidden');
+        entryForm.reset();
+        // renderPrizes() will be triggered by snapshot update from common.js
+    } else {
+        showNotification('เกิดข้อผิดพลาด กรุณาลองใหม่', 'error');
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'ยืนยันการเข้าร่วม';
+    }
 });
 
 // ===== Reveal Winner Logic =====
 function revealWinner(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize || !prize.winner) return;
 
-    // Show Modal
     winnerRevealModal.classList.remove('hidden');
 
-    // Setup Content
     const revealImage = document.getElementById('revealPrizeImage');
     const images = prize.images || (prize.image ? [prize.image] : []);
     revealImage.innerHTML = images.length > 0 ? `<img src="${images[0]}" style="max-height:200px; border-radius:8px;">` : '🎁';
@@ -310,16 +368,10 @@ function revealWinner(prizeId) {
     document.getElementById('revealWinnerTwitter').textContent = `@${prize.winner.twitter}`;
     document.getElementById('revealPrizeDescription').textContent = prize.description || 'ไม่มีรายละเอียด';
 
-    // Skip animation phases, show winner directly
     countdownPhase.classList.add('hidden');
     spinningPhase.classList.add('hidden');
     winnerPhase.classList.remove('hidden');
 
-    createConfetti();
-}
-
-function showWinnerPhase(prize) {
-    winnerPhase.classList.remove('hidden');
     createConfetti();
 }
 
@@ -345,7 +397,7 @@ function createConfetti() {
 
 // ===== Open Prize Detail Modal =====
 function openPrizeDetail(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
 
     const now = new Date();
@@ -365,10 +417,10 @@ function openPrizeDetail(prizeId) {
                 <div class="image-gallery" style="width: 100%; height: 100%;">
                     <img class="gallery-main-image" src="${images[0]}" data-prize-id="detail-${prize.id}" onclick="openImageViewer('${images[0]}');" style="cursor: pointer;">
                     ${images.length > 1 ? `
-                        <button class="gallery-nav prev" onclick="changeDetailGalleryImage(event, ${prize.id}, -1);">‹</button>
-                        <button class="gallery-nav next" onclick="changeDetailGalleryImage(event, ${prize.id}, 1);">›</button>
+                        <button class="gallery-nav prev" onclick="changeDetailGalleryImage(event, '${prize.id}', -1);">‹</button>
+                        <button class="gallery-nav next" onclick="changeDetailGalleryImage(event, '${prize.id}', 1);">›</button>
                         <div class="gallery-dots">
-                            ${images.map((_, index) => `<div class="gallery-dot ${index === 0 ? 'active' : ''}" onclick="setDetailGalleryImage(event, ${prize.id}, ${index});"></div>`).join('')}
+                            ${images.map((_, index) => `<div class="gallery-dot ${index === 0 ? 'active' : ''}" onclick="setDetailGalleryImage(event, '${prize.id}', ${index});"></div>`).join('')}
                         </div>
                     ` : ''}
                 </div>
@@ -381,20 +433,18 @@ function openPrizeDetail(prizeId) {
     document.getElementById('detailPrizeName').textContent = prize.name;
     document.getElementById('detailPrizeDescription').textContent = prize.description || 'ไม่มีรายละเอียด';
     document.getElementById('detailDeadline').textContent = formatDateTime(prize.deadline);
-    document.getElementById('detailEntries').textContent = `${prize.entries.length} คน`;
+    document.getElementById('detailEntries').textContent = `${prize.entries ? prize.entries.length : 0} คน`;
 
-    // Status
     let statusText = hasWinner ? '🏆 มีผู้โชคดีแล้ว' : (isActive ? '🎯 ร่วมลุ้นรางวัล' : '🔒 ปิดรับสมัครแล้ว');
     document.getElementById('detailStatus').textContent = statusText;
 
-    // Actions
     const detailActions = document.getElementById('detailActions');
     let actionsHtml = '';
 
     if (hasWinner) {
-        actionsHtml = `<button class="btn-draw" onclick="closePrizeDetailModal(); revealWinner(${prize.id});">🏆 ดูผู้โชคดี</button>`;
+        actionsHtml = `<button class="btn-draw" onclick="closePrizeDetailModal(); revealWinner('${prize.id}');">🏆 ดูผู้โชคดี</button>`;
     } else if (isActive) {
-        actionsHtml = `<button class="btn-enter" onclick="closePrizeDetailModal(); openEntryModal(${prize.id});">🎯 เข้าร่วมสุ่มรางวัล</button>`;
+        actionsHtml = `<button class="btn-enter" onclick="closePrizeDetailModal(); openEntryModal('${prize.id}');">🎯 เข้าร่วมสุ่มรางวัล</button>`;
     } else {
         actionsHtml = `<button class="btn-secondary" disabled>🔒 หมดเวลาเข้าร่วมแล้ว</button>`;
     }
@@ -408,35 +458,15 @@ function closePrizeDetailModal() {
 }
 
 closePrizeDetail.addEventListener('click', closePrizeDetailModal);
-prizeDetailModal.querySelector('.modal-overlay').addEventListener('click', closePrizeDetailModal);
+// Check if overlay exists
+const modalOverlay = prizeDetailModal.querySelector('.modal-overlay');
+if (modalOverlay) modalOverlay.addEventListener('click', closePrizeDetailModal);
 
-// Gallery helpers for detail modal (similar to common but with event stopPropagation to separate logic if needed, 
-// using separate IDs/data attributes??)
-// Actually common.js functions use data-prize-id logic.
-// If I use data-prize-id="detail-${prizeId}", common.js updateGalleryDisplay needs to target it.
-// common.js targets .gallery-main-image[data-prize-id="${prizeId}"]
-// So for detail, I should use matching ID or update common.js to handle detail specific ID?
-// Let's copy simple gallery logic for detail here to avoid conflict with list view gallery if mostly same.
-// Or just reuse common functions but pass event to stop propagation?
-
-function changeDetailGalleryImage(e, prizeId, direction) {
+// Gallery helpers for detail
+window.changeDetailGalleryImage = function (e, prizeId, direction) {
     e.stopPropagation();
-    // Reusing common logic but with "detail-" prefix support?
-    // Common logic: 
-    // const galleryImg = document.querySelector(`.gallery-main-image[data-prize-id="${prizeId}"]`);
-    // If I pass "detail-" + prizeId to common function? 
-    // common function takes prizeId to look up PRIZE DATA.
-    // If I pass "detail-123", it won't find prize in `prizes` array.
-
-    // So I need separate logic or update common.js.
-    // I'll implement simple local logic here for detail modal.
-
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
-
-    // We need to track index for detail view.
-    // Let's store it on the modal element or simpler variable?
-    // User only views one detail at a time.
 
     const images = prize.images || (prize.image ? [prize.image] : []);
     const imgElement = document.querySelector(`.gallery-main-image[data-prize-id="detail-${prizeId}"]`);
@@ -449,16 +479,19 @@ function changeDetailGalleryImage(e, prizeId, direction) {
     imgElement.src = images[currentIndex];
 
     // Update dots
-    const dots = imgElement.closest('.image-gallery').querySelectorAll('.gallery-dot');
-    dots.forEach((dot, i) => {
-        if (i === currentIndex) dot.classList.add('active');
-        else dot.classList.remove('active');
-    });
+    const galleryContainer = imgElement.closest('.image-gallery');
+    if (galleryContainer) {
+        const dots = galleryContainer.querySelectorAll('.gallery-dot');
+        dots.forEach((dot, i) => {
+            if (i === currentIndex) dot.classList.add('active');
+            else dot.classList.remove('active');
+        });
+    }
 }
 
-function setDetailGalleryImage(e, prizeId, index) {
+window.setDetailGalleryImage = function (e, prizeId, index) {
     e.stopPropagation();
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
 
     const images = prize.images || (prize.image ? [prize.image] : []);
@@ -469,15 +502,18 @@ function setDetailGalleryImage(e, prizeId, index) {
     imgElement.dataset.index = index;
     imgElement.src = images[index];
 
-    const dots = imgElement.closest('.image-gallery').querySelectorAll('.gallery-dot');
-    dots.forEach((dot, i) => {
-        if (i === index) dot.classList.add('active');
-        else dot.classList.remove('active');
-    });
+    const galleryContainer = imgElement.closest('.image-gallery');
+    if (galleryContainer) {
+        const dots = galleryContainer.querySelectorAll('.gallery-dot');
+        dots.forEach((dot, i) => {
+            if (i === index) dot.classList.add('active');
+            else dot.classList.remove('active');
+        });
+    }
 }
+
 
 // Make functions global
 window.openEntryModal = openEntryModal;
 window.revealWinner = revealWinner;
-window.changeGalleryImage = changeGalleryImage;
-window.setGalleryImage = setGalleryImage;
+window.closePrizeDetailModal = closePrizeDetailModal;

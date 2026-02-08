@@ -1,3 +1,5 @@
+import { addPrize, updatePrize, deletePrize, addLabel, updateLabel, deleteLabel } from './common.js';
+
 // ===== DOM Elements =====
 const adminPanel = document.getElementById('adminPanel'); // Main container
 const prizeForm = document.getElementById('prizeForm');
@@ -37,7 +39,7 @@ const DEFAULT_ADMIN_PASSWORD = 'admin123';
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    initializeAdminPassword(); // Ensure password exists first
+    initializeAdminPassword();
 
     // Force Authentication Check
     if (!checkAdminPassword()) {
@@ -54,16 +56,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    renderLabels(); // Shared data, admin view uses it too? No, renderLabels renders to labelsContainer (User view generally).
-    // But Admin might want to see labels preview? 
-    // Let's call renderAdminLabels provided by common/admin logic
+    // Subscribe to data updates
+    window.addEventListener('labelsUpdated', renderAdminLabels);
+    window.addEventListener('prizesUpdated', () => {
+        renderAdminPrizesList();
+        renderDrawPrizesList();
+    });
+
+    // Initial render attempt (though events will fire shortly after connect)
     renderAdminLabels();
     renderAdminPrizesList();
-    renderDrawPrizesList(); // In case draw tab is active default?
+    renderDrawPrizesList();
 
     initializeAdminTabs();
-    setMinDateTime(); // Helper from common? No, setMinDateTime is specific to form.
-    // form logic is in admin.js, so setMinDateTime should be here.
+    setMinDateTime();
 });
 
 // ===== Helper: Set Min DateTime =====
@@ -84,10 +90,9 @@ function initializeAdminPassword() {
 
 function checkAdminPassword() {
     const savedPassword = localStorage.getItem('adminPassword');
-    // Using prompt for simplicity as requested, or can be improved later
     const inputPassword = prompt('🔐 กรุณาใส่รหัสผ่าน Admin:\n\n(รหัสเริ่มต้น: admin123)');
 
-    if (inputPassword === null) return false; // User cancelled
+    if (inputPassword === null) return false;
 
     if (inputPassword === savedPassword) {
         isAdminAuthenticated = true;
@@ -121,7 +126,8 @@ function changeAdminPassword() {
     showNotification('เปลี่ยนรหัสผ่านสำเร็จ! 🎉');
 }
 
-document.getElementById('changePasswordBtn')?.addEventListener('click', changeAdminPassword);
+const changePasswordBtn = document.getElementById('changePasswordBtn');
+if (changePasswordBtn) changePasswordBtn.addEventListener('click', changeAdminPassword);
 
 // ===== Tab Switching =====
 function initializeAdminTabs() {
@@ -148,6 +154,8 @@ function initializeAdminTabs() {
 // ===== Labels Management =====
 function renderAdminLabels() {
     if (!labelsList) return;
+    const labels = window.labels || [];
+
     if (labels.length === 0) {
         labelsList.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 1rem;">ยังไม่มีป้ายประกาศ</p>';
         return;
@@ -156,43 +164,44 @@ function renderAdminLabels() {
         <div class="admin-label-item">
             <div class="admin-label-text">${label.text}</div>
             <div class="admin-label-actions">
-                <button class="label-edit-btn" onclick="editLabel(${label.id})">✏️</button>
-                <button class="label-delete-btn" onclick="deleteLabel(${label.id})">🗑️</button>
+                <button class="label-edit-btn" onclick="editLabel('${label.id}')">✏️</button>
+                <button class="label-delete-btn" onclick="deleteLabel('${label.id}')">🗑️</button>
             </div>
         </div>
     `).join('');
 }
 
-function addOrUpdateLabel() {
+async function addOrUpdateLabel() {
     const text = labelTextInput.value.trim();
     if (text === '') {
         showNotification('กรุณากรอกข้อความ!', 'error');
         return;
     }
 
+    addLabelBtn.disabled = true;
+
     if (editingLabelId !== null) {
-        const label = labels.find(l => l.id === editingLabelId);
-        if (label) {
-            label.text = text;
+        const success = await updateLabel(editingLabelId, text);
+        if (success) {
             showNotification('แก้ไขป้ายสำเร็จ! 💾');
+            cancelLabelEdit();
         }
-        cancelLabelEdit();
     } else {
         const newLabel = {
-            id: Date.now(),
             text: text,
             createdAt: new Date().toISOString()
         };
-        labels.push(newLabel);
-        showNotification('เพิ่มป้ายสำเร็จ! 🎉');
-        labelTextInput.value = '';
+        const success = await addLabel(newLabel);
+        if (success) {
+            showNotification('เพิ่มป้ายสำเร็จ! 🎉');
+            labelTextInput.value = '';
+        }
     }
-    saveLabels();
-    renderAdminLabels();
+    addLabelBtn.disabled = false;
 }
 
 function editLabel(labelId) {
-    const label = labels.find(l => l.id === labelId);
+    const label = window.labels.find(l => l.id == labelId);
     if (!label) return;
     editingLabelId = labelId;
     labelTextInput.value = label.text;
@@ -201,12 +210,12 @@ function editLabel(labelId) {
     labelTextInput.focus();
 }
 
-function deleteLabel(labelId) {
+async function deleteLabelWrapper(labelId) {
     if (!confirm('คุณต้องการลบป้ายนี้ใช่หรือไม่?')) return;
-    labels = labels.filter(l => l.id !== labelId);
-    saveLabels();
-    renderAdminLabels();
-    showNotification('ลบป้ายสำเร็จ! 🗑️');
+    const success = await deleteLabel(labelId);
+    if (success) {
+        showNotification('ลบป้ายสำเร็จ! 🗑️');
+    }
 }
 
 function cancelLabelEdit() {
@@ -221,9 +230,9 @@ if (cancelLabelEditBtn) cancelLabelEditBtn.addEventListener('click', cancelLabel
 
 
 // ===== Prize Management =====
-prizeForm.addEventListener('submit', (e) => {
+prizeForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const editingId = editingPrizeId || (prizeForm.dataset.id ? parseInt(prizeForm.dataset.id) : null);
+    const editingId = editingPrizeId; // Use state variable directly
 
     const name = document.getElementById('prizeName').value;
     const desc = document.getElementById('prizeDescription').value;
@@ -231,24 +240,26 @@ prizeForm.addEventListener('submit', (e) => {
     const images = imageInput.split(',').map(url => url.trim()).filter(url => url.length > 0);
     const deadline = document.getElementById('prizeDeadline').value;
 
-    if (editingId) {
-        const prize = prizes.find(p => p.id === editingId);
-        if (prize) {
-            const currentEntries = prize.entries || []; // Backup entries
-            prize.name = name;
-            prize.description = desc;
-            prize.images = images;
-            prize.deadline = deadline;
-            prize.entries = currentEntries; // Restore entries
+    const submitBtn = document.getElementById('savePrizeBtn') || document.querySelector('#prizeForm button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
 
-            savePrizes();
-            showNotification('แก้ไขของรางวัลสำเร็จ! 💾');
-            cancelEdit();
-            renderAdminPrizesList();
+    if (editingId) {
+        const prize = window.prizes.find(p => p.id == editingId);
+        if (prize) {
+            const success = await updatePrize(editingId, {
+                name: name,
+                description: desc,
+                images: images,
+                deadline: deadline
+            });
+
+            if (success) {
+                showNotification('แก้ไขของรางวัลสำเร็จ! 💾');
+                cancelEdit();
+            }
         }
     } else {
         const prize = {
-            id: Date.now(),
             name: name,
             description: desc,
             images: images,
@@ -257,21 +268,22 @@ prizeForm.addEventListener('submit', (e) => {
             winner: null,
             createdAt: new Date().toISOString()
         };
-        prizes.push(prize);
-        savePrizes();
-        showNotification('เพิ่มของรางวัลสำเร็จ! 🎉');
-        prizeForm.reset();
-        setMinDateTime();
-        renderAdminPrizesList();
+        const success = await addPrize(prize);
+        if (success) {
+            showNotification('เพิ่มของรางวัลสำเร็จ! 🎉');
+            prizeForm.reset();
+            setMinDateTime();
+        }
     }
+    if (submitBtn) submitBtn.disabled = false;
 });
 
 function editPrize(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
 
     editingPrizeId = prizeId;
-    prizeForm.dataset.id = prizeId; // Robustness
+    // prizeForm.dataset.id = prizeId; // No longer needed if we use state variable
 
     document.getElementById('prizeName').value = prize.name;
     document.getElementById('prizeDescription').value = prize.description || '';
@@ -299,7 +311,6 @@ function editPrize(prizeId) {
 
 function cancelEdit() {
     editingPrizeId = null;
-    delete prizeForm.dataset.id;
     prizeForm.reset();
     setMinDateTime();
 
@@ -312,20 +323,21 @@ function cancelEdit() {
 // Global scope for onclick handlers
 window.cancelEdit = cancelEdit;
 
-function deletePrize(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+async function deletePrizeWrapper(prizeId) {
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
     if (!confirm(`คุณแน่ใจหรือไม่ที่จะลบของรางวัล "${prize.name}"?`)) return;
 
-    prizes = prizes.filter(p => p.id !== prizeId);
-    savePrizes();
-    renderAdminPrizesList();
-    showNotification('ลบของรางวัลสำเร็จ! 🗑️');
+    const success = await deletePrize(prizeId);
+    if (success) {
+        showNotification('ลบของรางวัลสำเร็จ! 🗑️');
+    }
 }
 
 function renderAdminPrizesList() {
     if (!adminPrizesList) return;
     const now = new Date();
+    const prizes = window.prizes || [];
 
     if (prizes.length === 0) {
         adminPrizesList.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted);">ยังไม่มีของรางวัล</div>';
@@ -362,15 +374,15 @@ function renderAdminPrizesList() {
                     <div style="display:flex; gap:0.75rem; align-items:center; font-size:0.85rem; color:var(--text-muted);">
                         <span>${statusHtml}</span>
                         <span>•</span>
-                        <span>👥 ${prize.entries.length} คน</span>
+                        <span>👥 ${prize.entries ? prize.entries.length : 0} คน</span>
                         <span>•</span>
                         <span>⏰ ${formatDateTime(prize.deadline)}</span>
                     </div>
                 </div>
                 <div style="display:flex; gap:0.5rem;">
-                   <button onclick="showParticipantsList(${prize.id})" title="ดูผู้เข้าร่วม" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); cursor:pointer;">👥</button>
-                   <button onclick="editPrize(${prize.id})" title="แก้ไข" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(79, 172, 254, 0.3); background:rgba(79, 172, 254, 0.1); color:#4facfe; cursor:pointer;">✏️</button>
-                   <button onclick="deletePrize(${prize.id})" title="ลบ" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(245, 87, 108, 0.3); background:rgba(245, 87, 108, 0.1); color:#f5576c; cursor:pointer;">🗑️</button>
+                   <button onclick="showParticipantsList('${prize.id}')" title="ดูผู้เข้าร่วม" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); cursor:pointer;">👥</button>
+                   <button onclick="editPrize('${prize.id}')" title="แก้ไข" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(79, 172, 254, 0.3); background:rgba(79, 172, 254, 0.1); color:#4facfe; cursor:pointer;">✏️</button>
+                   <button onclick="deletePrize('${prize.id}')" title="ลบ" style="padding:0.4rem 0.8rem; border-radius:6px; border:1px solid rgba(245, 87, 108, 0.3); background:rgba(245, 87, 108, 0.1); color:#f5576c; cursor:pointer;">🗑️</button>
                 </div>
             </div>
         `;
@@ -386,39 +398,44 @@ function switchDrawTab(tab) {
     const historyContainer = document.getElementById('drawHistoryContainer');
 
     if (tab === 'ready') {
-        readyBtn.classList.add('btn-primary');
-        readyBtn.classList.remove('btn-secondary');
-        historyBtn.classList.add('btn-secondary');
-        historyBtn.classList.remove('btn-primary');
+        if (readyBtn) {
+            readyBtn.classList.add('btn-primary');
+            readyBtn.classList.remove('btn-secondary');
+        }
+        if (historyBtn) {
+            historyBtn.classList.add('btn-secondary');
+            historyBtn.classList.remove('btn-primary');
+        }
 
-        readyContainer.classList.remove('hidden');
-        historyContainer.classList.add('hidden');
+        if (readyContainer) readyContainer.classList.remove('hidden');
+        if (historyContainer) historyContainer.classList.add('hidden');
     } else {
-        readyBtn.classList.add('btn-secondary');
-        readyBtn.classList.remove('btn-primary');
-        historyBtn.classList.add('btn-primary');
-        historyBtn.classList.remove('btn-secondary');
+        if (readyBtn) {
+            readyBtn.classList.add('btn-secondary');
+            readyBtn.classList.remove('btn-primary');
+        }
+        if (historyBtn) {
+            historyBtn.classList.add('btn-primary');
+            historyBtn.classList.remove('btn-secondary');
+        }
 
-        readyContainer.classList.add('hidden');
-        historyContainer.classList.remove('hidden');
+        if (readyContainer) readyContainer.classList.add('hidden');
+        if (historyContainer) historyContainer.classList.remove('hidden');
     }
 }
+// Expose for onClick
+window.switchDrawTab = switchDrawTab;
 
-// ===== Draw & Winners =====
 // ===== Draw & Winners =====
 function renderDrawPrizesList() {
     const readyList = document.getElementById('drawReadyList');
     const historyList = document.getElementById('drawHistoryList');
 
-    // Safety check: if new containers don't exist yet (e.g. old HTML cached), try legacy or return
-    if ((!readyList || !historyList) && drawPrizesList) {
-        // Fallback to old behavior if HTML not updated yet? 
-        // Or just return to avoid errors.
-        // But since we updated HTML, they should exist after refresh.
-    }
     if (!readyList || !historyList) return;
 
     const now = new Date();
+    const prizes = window.prizes || [];
+
     // Only expired prizes can be drawn (and not yet won)
     const readyToDraw = prizes.filter(p => !p.winner && now >= new Date(p.deadline));
     const history = prizes.filter(p => p.winner);
@@ -441,11 +458,11 @@ function renderDrawPrizesList() {
                 <h4 style="font-size:1.2rem; margin-bottom:0.5rem; color:var(--text-primary);">${p.name}</h4>
                 <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">${p.description || ''}</p>
                 
-                <button onclick="showParticipantsList(${p.id})" style="margin-bottom:1rem; padding:0.5rem 1rem; background:rgba(102, 126, 234, 0.2); border:1px solid rgba(102, 126, 234, 0.3); border-radius:20px; font-size:0.9rem; color: #fff; cursor: pointer; transition: all 0.2s ease; display:flex; align-items:center; gap:0.5rem;" onmouseover="this.style.background='rgba(102, 126, 234, 0.4)'" onmouseout="this.style.background='rgba(102, 126, 234, 0.2)'">
-                    <span style="font-size:1rem;">👥</span> ผู้เข้าร่วม: ${p.entries.length} คน
+                <button onclick="showParticipantsList('${p.id}')" style="margin-bottom:1rem; padding:0.5rem 1rem; background:rgba(102, 126, 234, 0.2); border:1px solid rgba(102, 126, 234, 0.3); border-radius:20px; font-size:0.9rem; color: #fff; cursor: pointer; transition: all 0.2s ease; display:flex; align-items:center; gap:0.5rem;" onmouseover="this.style.background='rgba(102, 126, 234, 0.4)'" onmouseout="this.style.background='rgba(102, 126, 234, 0.2)'">
+                    <span style="font-size:1rem;">👥</span> ผู้เข้าร่วม: ${p.entries ? p.entries.length : 0} คน
                 </button>
 
-                <button onclick="showWheelModal(${p.id})" class="btn-primary" style="width:100%;">🎡 สุ่มผู้โชคดี</button>
+                <button onclick="showWheelModal('${p.id}')" class="btn-primary" style="width:100%;">🎡 สุ่มผู้โชคดี</button>
             </div>
             `;
             }).join('') + '</div>';
@@ -485,18 +502,17 @@ function renderDrawPrizesList() {
 
 // ===== Wheel Interaction =====
 let isSpinning = false;
-let currentRotation = 0;
 let currentWheelPrizeId = null;
 const wheelColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788'];
 
 function showWheelModal(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
     currentWheelPrizeId = prizeId;
 
     document.getElementById('wheelPrizeName').textContent = prize.name;
     wheelModal.classList.remove('hidden');
-    drawWheel(prize.entries);
+    drawWheel(prize.entries || []);
 }
 
 document.getElementById('closeWheel').addEventListener('click', () => wheelModal.classList.add('hidden'));
@@ -510,6 +526,8 @@ function drawWheel(entries) {
     const radius = cx - 10;
 
     ctx.clearRect(0, 0, width, height);
+    if (!entries || entries.length === 0) return;
+
     const arc = (2 * Math.PI) / entries.length;
 
     entries.forEach((entry, i) => {
@@ -536,15 +554,19 @@ function drawWheel(entries) {
 window.spinWheel = function () { // Make global
     if (isSpinning) return;
     isSpinning = true;
-    const prize = prizes.find(p => p.id === currentWheelPrizeId);
-    const winnerIndex = Math.floor(Math.random() * prize.entries.length);
-    const winner = prize.entries[winnerIndex];
+    const prize = window.prizes.find(p => p.id == currentWheelPrizeId);
+    const entries = prize.entries || [];
+    if (entries.length === 0) {
+        isSpinning = false;
+        return;
+    }
 
-    const arc = (2 * Math.PI) / prize.entries.length;
+    const winnerIndex = Math.floor(Math.random() * entries.length);
+    const winner = entries[winnerIndex];
+
+    const arc = (2 * Math.PI) / entries.length;
     const spins = 10;
-    const targetRotation = (spins * 2 * Math.PI) + (winnerIndex * arc) + (arc / 2); // naive, needs proper math if rotating canvas vs pointer.
-    // Actually, usually we rotate canvas. 
-    // Let's keep it simple for now, standard wheel logic.
+    const targetRotation = (spins * 2 * Math.PI) + (winnerIndex * arc) + (arc / 2);
 
     let start = Date.now();
     let duration = 3000;
@@ -562,7 +584,7 @@ window.spinWheel = function () { // Make global
         ctx.translate(wheelCanvas.width / 2, wheelCanvas.height / 2);
         ctx.rotate(currentRot);
         ctx.translate(-wheelCanvas.width / 2, -wheelCanvas.height / 2);
-        drawWheel(prize.entries);
+        drawWheel(entries);
         ctx.restore();
 
         if (p < 1) requestAnimationFrame(animate);
@@ -574,26 +596,50 @@ window.spinWheel = function () { // Make global
     animate();
 }
 
-function announceWinner(prize, winner) {
-    prize.winner = winner;
-    savePrizes();
-    renderDrawPrizesList();
-    wheelModal.classList.add('hidden');
-    showNotification(`ผู้ชนะคือ ${winner.name}!`);
+async function announceWinner(prize, winner) {
+    // prize.winner = winner; // Wait, we should update Firestore
+    const success = await updatePrize(prize.id, { winner: winner });
 
-    // Show winner card
-    showWinner(prize.id);
+    if (success) {
+        // renderDrawPrizesList(); // Listener will trigger this
+        wheelModal.classList.add('hidden');
+        showNotification(`ผู้ชนะคือ ${winner.name}!`);
+        // Show winner card
+        // Need to wait for update to reflect locally? 
+        // Not necessarily, we can pass ID.
+        // But showWinner looks up prize by ID from window.prizes.
+        // Since subscription is async, window.prizes might not be updated yet.
+        // We can pass the winner object directly or just rely on eventual consistency?
+        // Let's rely on eventual consistency but for UX let's simulate?
+        // Or just wait a bit? 
+        // Or refactor showWinner to take prize object.
+        // Let's refactor showWinner to attempt finding from window.prizes, 
+        // but if not found? It should be there. 
+        // The issue is if the winner field is updated.
+        // For modal, we need the priz/winner data. 
+        // We have `prize` and `winner` in this scope.
+        // So we can manually construct the modal call or update state locally?
+        // But window.prizes is overwritten by snapshot.
+        // Let's just call showWinner(prize.id) and trust Firestore is fast enough OR 
+        // modify showWinner to accept data.
+        // For now, let's keep it simple. Local reflection might lag.
+        // To fix UX: Manually show winner modal with known data? 
+        // Or just override local object temporarily? 
+        // window.prizes will be updated.
+        showWinnerWithData(prize, winner);
+    }
 }
 
 // ===== Participants List =====
 function showParticipantsList(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize) return;
 
     participantsPrizeName.textContent = prize.name;
-    participantsCount.textContent = `จำนวน: ${prize.entries.length} คน`;
+    const entries = prize.entries || [];
+    participantsCount.textContent = `จำนวน: ${entries.length} คน`;
 
-    participantsList.innerHTML = prize.entries.map((e, i) => `
+    participantsList.innerHTML = entries.map((e, i) => `
         <div style="padding:0.5rem;border-bottom:1px solid #eee;">
             ${i + 1}. <strong>${e.name}</strong> (@${e.twitter})
         </div>
@@ -606,21 +652,27 @@ closeParticipants.addEventListener('click', () => participantsModal.classList.ad
 
 // ===== Show Winner (Simple) =====
 function showWinner(prizeId) {
-    const prize = prizes.find(p => p.id === prizeId);
+    const prize = window.prizes.find(p => p.id == prizeId);
     if (!prize || !prize.winner) return;
+    showWinnerWithData(prize, prize.winner);
+}
 
-    winnerName.textContent = prize.winner.name;
-    winnerTwitter.textContent = `@${prize.winner.twitter}`;
+function showWinnerWithData(prize, winner) {
+    winnerName.textContent = winner.name;
+    winnerTwitter.textContent = `@${winner.twitter}`;
     winnerPrizeName.textContent = prize.name;
-    document.getElementById('winnerPrizeDescription').textContent = prize.description || '';
+    const descEl = document.getElementById('winnerPrizeDescription');
+    if (descEl) descEl.textContent = prize.description || '';
 
     const imgEl = document.getElementById('winnerPrizeImage');
     const images = prize.images || (prize.image ? [prize.image] : []);
-    if (images.length > 0) {
-        imgEl.src = images[0];
-        imgEl.style.display = 'inline-block';
-    } else {
-        imgEl.style.display = 'none';
+    if (imgEl) {
+        if (images.length > 0) {
+            imgEl.src = images[0];
+            imgEl.style.display = 'inline-block';
+        } else {
+            imgEl.style.display = 'none';
+        }
     }
 
     winnerModal.classList.remove('hidden');
@@ -630,9 +682,9 @@ closeWinnerModal.addEventListener('click', () => winnerModal.classList.add('hidd
 
 // Make functions global for inline onclick
 window.editLabel = editLabel;
-window.deleteLabel = deleteLabel;
+window.deleteLabel = deleteLabelWrapper; // Use wrapper
 window.editPrize = editPrize;
-window.deletePrize = deletePrize;
+window.deletePrize = deletePrizeWrapper; // Use wrapper
 window.showParticipantsList = showParticipantsList;
 window.showWheelModal = showWheelModal;
 window.showWinner = showWinner;
