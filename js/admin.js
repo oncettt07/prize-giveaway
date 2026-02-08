@@ -37,9 +37,20 @@ const DEFAULT_ADMIN_PASSWORD = 'admin123';
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
+    initializeAdminPassword(); // Ensure password exists first
+
     // Force Authentication Check
     if (!checkAdminPassword()) {
-        document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;gap:1rem;"><h2>Access Denied</h2><button onclick="location.reload()">Retry</button></div>';
+        document.body.innerHTML = `
+            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;gap:1.5rem; background:linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color:white; font-family:'Kanit', sans-serif;">
+                <div style="font-size:3rem;">🔒</div>
+                <h2 style="font-size:2rem; margin:0;">Access Denied</h2>
+                <p style="color:#a0a0a0;">ต้องใช้รหัสผ่าน Admin เพื่อเข้าถึงหน้านี้</p>
+                <div style="display:flex; gap:1rem;">
+                    <button onclick="location.href='index.html'" style="padding:0.75rem 1.5rem; border:none; border-radius:8px; background:rgba(255,255,255,0.1); color:white; cursor:pointer;">🏠 กลับหน้าหลัก</button>
+                    <button onclick="location.reload()" style="padding:0.75rem 1.5rem; border:none; border-radius:8px; background:#4facfe; color:white; cursor:pointer; font-weight:600;">🔄 ลองใหม่อีกครั้ง</button>
+                </div>
+            </div>`;
         return;
     }
 
@@ -51,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderDrawPrizesList(); // In case draw tab is active default?
 
     initializeAdminTabs();
-    initializeAdminPassword();
     setMinDateTime(); // Helper from common? No, setMinDateTime is specific to form.
     // form logic is in admin.js, so setMinDateTime should be here.
 });
@@ -77,7 +87,7 @@ function checkAdminPassword() {
     // Using prompt for simplicity as requested, or can be improved later
     const inputPassword = prompt('🔐 กรุณาใส่รหัสผ่าน Admin:\n\n(รหัสเริ่มต้น: admin123)');
 
-    if (inputPassword === null) return false;
+    if (inputPassword === null) return false; // User cancelled
 
     if (inputPassword === savedPassword) {
         isAdminAuthenticated = true;
