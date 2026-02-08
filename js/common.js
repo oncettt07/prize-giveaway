@@ -1,6 +1,17 @@
 // ===== Data =====
 let prizes = JSON.parse(localStorage.getItem('prizes')) || [];
-let labels = JSON.parse(localStorage.getItem('labels')) || [];
+let labels = JSON.parse(localStorage.getItem('labels'));
+
+if (!labels) {
+    labels = [
+        {
+            id: Date.now(),
+            text: 'TWICE OFFICIAL FANCLUB (2ND GENERATION)',
+            createdAt: new Date().toISOString()
+        }
+    ];
+    localStorage.setItem('labels', JSON.stringify(labels));
+}
 
 // ===== Helper Functions =====
 function savePrizes() {
