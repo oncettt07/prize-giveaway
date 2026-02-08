@@ -1799,6 +1799,48 @@ body {
     color: var(--text-primary);
 }
 
+/* ===== Mobile Responsiveness ===== */
+@media (max-width: 480px) {
+    .modal-content {
+        padding: var(--spacing-sm);
+        width: 95%;
+        max-height: 90vh;
+        /* Prevent overflow */
+        overflow-y: auto;
+        /* Allow scrolling if content is tall */
+    }
+
+    .form-actions {
+        display: flex;
+        flex-direction: column-reverse;
+        /* Stack buttons, Cancel at bottom for easier reach? Or top? Standard is standard. */
+        /* Let's use column, and order if needed. Usually Primary top. */
+        /* If column-reverse: Cancel (first in DOM) goes to bottom. Submit (second) goes to top. */
+        gap: var(--spacing-sm);
+        margin-top: var(--spacing-md);
+    }
+
+    .form-actions button {
+        width: 100%;
+        margin: 0 !important;
+        justify-content: center;
+        padding: 0.8rem;
+        /* Larger touch target */
+    }
+
+    .prize-detail-actions {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+
+    .prize-detail-actions button {
+        width: 100%;
+        justify-content: center;
+        padding: 0.8rem;
+    }
+}
+
 .prize-reveal-image img:hover {
     transform: scale(1.02);
 }
