@@ -1,0 +1,7 @@
+*.py
+temp_*.txt
+*.ipynb
+__pycache__/
+.DS_Store
+node_modules/
+.vscode/
