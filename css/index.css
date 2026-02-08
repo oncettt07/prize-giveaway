@@ -1842,29 +1842,52 @@ body {
 
     /* Winner Reveal Mobile Adjustments */
     .winner-phase-container {
-        padding: 1.5rem;
+        padding: 1rem;
     }
 
     .winner-title-text {
-        font-size: 2rem;
-        margin-bottom: 1rem;
+        font-size: 1.5rem;
+        /* Reduced from 2rem */
+        margin-bottom: 0.5rem;
     }
 
     .winner-info-box {
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 1rem;
+    }
+
+    .winner-label {
+        font-size: 0.8rem;
     }
 
     .winner-name-big {
-        font-size: 2rem;
+        font-size: 1.5rem;
+        /* Reduced from 2rem */
+        word-break: break-all;
+        /* Prevent overflow for long names */
     }
 
     .winner-twitter-text {
-        font-size: 1.2rem;
+        font-size: 1rem;
+    }
+
+    .prize-info-box {
+        padding: 1rem;
+    }
+
+    .prize-info-title {
+        font-size: 0.9rem;
     }
 
     .prize-name-text {
-        font-size: 1.5rem;
+        font-size: 1.2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .prize-reveal-image img {
+        max-height: 150px;
+        /* Limit image height */
     }
 }
 
