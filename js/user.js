@@ -30,21 +30,7 @@ let currentPrizeId = null;
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    // Listen for data updates from common.js
-    window.addEventListener('labelsUpdated', renderLabels); // renderLabels is global from common.js? No, from common.js it's internal unless exposed.
-    // In common.js I removed renderLabels export? 
-    // Wait, common.js has renderLabels() function but it was NOT attached to window in my rewrite.
-    // I need to check common.js again.
-    // In common.js I wrote: function renderLabels() { ... } but did NOT export it or attach to window.
-    // AND I removed it from common.js in the rewrite?
-    // Let me check common.js content I wrote in Step 798.
-    // I DELETED renderLabels logic from common.js because I thought it was UI logic.
-    // BUT user.js relied on it.
-    // So I need to implement renderLabels in user.js OR add it back to common.js.
-    // Since it renders to 'labelsContainer' which is in index.html, it belongs in user.js (or common if shared).
-    // admin.js has its own renderAdminLabels.
-    // So user.js needs renderLabels.
-
+    // Listen for data updates
     window.addEventListener('prizesUpdated', () => {
         renderPrizes(); // For Join Tab
         renderWinnersList(); // For Winners Tab
